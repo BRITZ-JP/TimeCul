@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <title>時間計算ツール</title>
+  <!-- Google Fonts: Noto Sans JP -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap" rel="stylesheet">
+  <style>
+    /* 全体のリセット */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Noto Sans JP', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    /* コンテナ設定 */
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    /* 見出しの整形 */
+    h2, h3 {
+      text-align: center;
+    }
+    /* フォーム要素の整形 */
+    label {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    /* 結果表示の整形 */
+    #totalTime {
+      font-size: 1.2em;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 20px;
+    }
+    /* 追加オプションの整形 */
+    #additionalOptions,
+    #fineCutOptions,
+    #eyeletOptions {
+      margin-bottom: 15px;
+    }
+  </style>
+  <script>
+    const parameters = {
+      "A": { text: "ラミネートあり", time: 0.6 },
+      "B": { text: "ラミネートなし", time: 0 },
+      "C": { text: "トンボカットやシートカットのみ", time: 3 },
+      "D": { text: "アルポリカット", time: 15 },
+      "E": { text: "ファインカット", time: 0 },
+      "E1": { text: "透明アクリル (1440分)", time: 1440 },
+      "E2": { text: "ガラス (2880分)", time: 2880 },
+      "F": { text: "パネルやアクリル (1.5分)", time: 1.5 },
+      "G": { text: "透明PET、マグネット、ゴムマット (3分)", time: 3 },
+      "I": { text: "ベロだし (1.5分)", time: 1.5 },
+      "J": { text: "パネル繋ぎ (3分)", time: 3 },
+      "K": { text: "巻き込み (15分)", time: 15 },
+      "L": { text: "ツラ落とし (10分)", time: 10 },
+      "M": { text: "両面 (3分)", time: 3 },
+      "N": { text: "文字のHが21mm以上 (0.5分)", time: 0.5 },
+      "O": { text: "文字のHが20mm未満 (1分)", time: 1 },
+      "O2": { text: "文字のHが20mm未満のテンタックや3M糊 (3分)", time: 3 },
+      "S1": { text: "通常縫製 (2分)", time: 2 },
+      "S2": { text: "四方折り返し (4分)", time: 4 },
+      "S3": { text: "ハトメ (0分)", time: 0 }
+    };
+
+    function calculateTotalTime() {
+      let total = 0;
+      let multiplier = parseInt(document.getElementById("multiplier").value) || 1;
+
+      // ラミネート、マウント、追加処理 (select4) の選択を加算
+      const otherSelectIds = ["select1", "select2", "select4"];
+      otherSelectIds.forEach(id => {
+        let elem = document.getElementById(id);
+        if (elem && elem.value) {
+          total += parameters[elem.value].time * multiplier;
+        }
+      });
+
+      // カット作業の選択（select3）の処理
+      let cutSelect = document.getElementById("select3");
+      if (cutSelect && cutSelect.value) {
+        if (cutSelect.value === "E") {
+          // ファインカットの場合：基本時間は0として、追加処理のみ計算する
+          let fineCutSelect = document.getElementById("select5").value;
+          if (fineCutSelect) {
+            let charCount = parseInt(document.getElementById("charCount").value) || 0;
+            if (fineCutSelect === "N") {
+              total += charCount * parameters["N"].time * multiplier;
+            } else if (fineCutSelect === "O") {
+              total += charCount * parameters["O"].time * multiplier;
+            } else if (fineCutSelect === "O2") {
+              total += charCount * parameters["O2"].time * multiplier;
+            }
+          }
+        } else {
+          // ファインカット以外の場合は、基本時間に乗数を掛けて加算
+          total += parameters[cutSelect.value].time * multiplier;
+        }
+      }
+
+      // 縫製項目の選択取得
+      let sewingSelect = document.getElementById("sewingSelect");
+      if (sewingSelect && sewingSelect.value) {
+        total += parameters[sewingSelect.value].time * multiplier;
+      }
+
+      // ハトメが選ばれている場合の処理
+      let eyeletSelect = document.getElementById("sewingType");
+      if (eyeletSelect && eyeletSelect.value === "S3") {
+        let t1Count = parseInt(document.getElementById("t1Count").value) || 0;
+        let t2Count = parseInt(document.getElementById("t2Count").value) || 0;
+        total += (t1Count * 0.1) + (t2Count * 3);
+      }
+
+      // 合計時間を表示
+      document.getElementById("totalTime").innerText = `合計時間: ${total.toFixed(1)} 分`;
+    }
+
+    function toggleAdditionalOptions() {
+      let mountSelect = document.getElementById("select2").value;
+      let additionalOptions = document.getElementById("additionalOptions");
+      additionalOptions.style.display = (mountSelect === "F") ? "block" : "none";
+      calculateTotalTime();
+    }
+
+    function toggleFineCutOptions() {
+      let cutSelect = document.getElementById("select3").value;
+      let fineCutOptions = document.getElementById("fineCutOptions");
+      fineCutOptions.style.display = (cutSelect === "E") ? "block" : "none";
+      calculateTotalTime();
+    }
+
+    function toggleEyeletOptions() {
+      let sewingType = document.getElementById("sewingType").value;
+      let eyeletOptions = document.getElementById("eyeletOptions");
+      eyeletOptions.style.display = (sewingType === "S3") ? "block" : "none";
+      calculateTotalTime();
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h2>作業時間計算ツール</h2>
+    <label for="multiplier">総m数を入力:</label>
+    <input type="number" id="multiplier" value="1" min="1" onchange="calculateTotalTime()">
+
+    <label for="select1">ラミネート:</label>
+    <select id="select1" onchange="calculateTotalTime()">
+      <option value="">選択してください</option>
+      <option value="A">あり (0.6分)</option>
+      <option value="B">なし (0分)</option>
+    </select>
+
+    <label for="select2">マウント:</label>
+    <select id="select2" onchange="toggleAdditionalOptions()">
+      <option value="">選択してください</option>
+      <option value="F">パネルやアクリル (1.5分)</option>
+      <option value="G">透明PET、マグネット、ゴムマット (3分)</option>
+      <option value="E1">透明アクリルなどの水貼り (1440分)</option>
+      <option value="E2">ガラス (2880分)</option>
+    </select>
+
+    <div id="additionalOptions" style="display: none;">
+      <label for="select4">追加処理:</label>
+      <select id="select4" onchange="calculateTotalTime()">
+        <option value="">選択してください</option>
+        <option value="I">ベロだし (1.5分)</option>
+        <option value="J">パネル繋ぎ (3分)</option>
+        <option value="K">巻き込み (15分)</option>
+        <option value="L">ツラ落とし (10分)</option>
+        <option value="M">両面 (3分)</option>
+      </select>
+    </div>
+
+    <label for="select3">カット作業:</label>
+    <select id="select3" onchange="toggleFineCutOptions()">
+      <option value="">選択してください</option>
+      <option value="C">トンボカットやシートカットのみ (3分)</option>
+      <option value="D">アルポリカット (15分)</option>
+      <option value="E">ファインカット (0分)</option>
+    </select>
+
+    <div id="fineCutOptions" style="display: none;">
+      <label for="select5">ファインカット追加処理:</label>
+      <select id="select5" onchange="calculateTotalTime()">
+        <option value="">選択してください</option>
+        <option value="N">文字のHが21mm以上 (0.5分)</option>
+        <option value="O">文字のHが20mm未満 (1分)</option>
+        <option value="O2">文字のHが20mm未満のテンタックや3M糊 (3分)</option>
+      </select>
+      <label for="charCount">文字数を入力:</label>
+      <input type="number" id="charCount" value="1" min="1" onchange="calculateTotalTime()">
+    </div>
+
+    <label for="sewingSelect">縫製:</label>
+    <select id="sewingSelect" onchange="calculateTotalTime()">
+      <option value="">選択してください</option>
+      <option value="S1">通常縫製 (2分)</option>
+      <option value="S2">四方折り返し (4分)</option>
+    </select>
+
+    <label for="sewingType">ハトメ:</label>
+    <select id="sewingType" onchange="toggleEyeletOptions()">
+      <option value="">選択してください</option>
+      <option value="S3">ハトメ (0分)</option>
+    </select>
+
+    <div id="eyeletOptions" style="display: none;">
+      <label for="t1Count">25番 (0.1分):</label>
+      <input type="number" id="t1Count" value="0" min="0" onchange="calculateTotalTime()">
+      <label for="t2Count">28番 (3分):</label>
+      <input type="number" id="t2Count" value="0" min="0" onchange="calculateTotalTime()">
+    </div>
+
+    <h3 id="totalTime">合計時間: 0 分</h3>
+  </div>
+</body>
+</html>
