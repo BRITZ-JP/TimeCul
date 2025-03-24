@@ -33,6 +33,13 @@
     h2, h3 {
       text-align: center;
     }
+    /* 追加した段落の整形 */
+    p {
+      font-size: 1.1em;
+      text-align: center;
+      margin: 10px 0 20px;
+      color: #555;
+    }
     /* フォーム要素の整形 */
     label {
       margin-bottom: 5px;
@@ -64,17 +71,18 @@
     const parameters = {
       "A": { text: "ラミネートあり", time: 0.6 },
       "B": { text: "ラミネートなし", time: 0 },
-      "C": { text: "トンボカットやシートカットのみ", time: 3 },
+      "C": { text: "トンボカットやシートカットのみ", time: 1 },
       "D": { text: "アルポリカット", time: 15 },
       "E": { text: "ファインカット", time: 0 },
-      "E1": { text: "透明アクリル (1440分)", time: 1440 },
-      "E2": { text: "ガラス (2880分)", time: 2880 },
+      "E1": { text: "透明アクリルやガラス (1440分)", time: 1440 },
+//      "E2": { text: "ガラス (2880分)", time: 2880 },
+  　　 "H": { text: "裏面ラミ、透明PET (0.6分)", time: 0.6 },
       "F": { text: "パネルやアクリル (1.5分)", time: 1.5 },
-      "G": { text: "透明PET、マグネット、ゴムマット (3分)", time: 3 },
+      "G": { text: "マグネット、ゴムマット (3分)", time: 3 },
       "I": { text: "ベロだし (1.5分)", time: 1.5 },
       "J": { text: "パネル繋ぎ (3分)", time: 3 },
-      "K": { text: "巻き込み (15分)", time: 15 },
-      "L": { text: "ツラ落とし (10分)", time: 10 },
+      "K": { text: "巻き込み (7分)", time: 7 },
+      "L": { text: "ツラ落とし (4分)", time: 4 },
       "M": { text: "両面 (3分)", time: 3 },
       "N": { text: "文字のHが21mm以上 (0.5分)", time: 0.5 },
       "O": { text: "文字のHが20mm未満 (1分)", time: 1 },
@@ -90,13 +98,17 @@
 
       // ラミネート、マウント、追加処理 (select4) の選択を加算
       const otherSelectIds = ["select1", "select2", "select4"];
-      otherSelectIds.forEach(id => {
-        let elem = document.getElementById(id);
-        if (elem && elem.value) {
-          total += parameters[elem.value].time * multiplier;
-        }
-      });
-
+  otherSelectIds.forEach(id => {
+    let elem = document.getElementById(id);
+    if (elem && elem.value) {
+      // 「透明アクリル」(E1) または「ガラス」(E2) の場合は、乗数を掛けずに固定値を加算
+      if (id === "select2" && (elem.value === "E1" || elem.value === "E2")) {
+        total += parameters[elem.value].time;
+      } else {
+        total += parameters[elem.value].time * multiplier;
+      }
+    }
+  });
       // カット作業の選択（select3）の処理
       let cutSelect = document.getElementById("select3");
       if (cutSelect && cutSelect.value) {
@@ -133,8 +145,10 @@
         total += (t1Count * 0.1) + (t2Count * 3);
       }
 
-      // 合計時間を表示
-      document.getElementById("totalTime").innerText = `合計時間: ${total.toFixed(1)} 分`;
+      // 分と時間の両方を四捨五入して表示
+let roundedMinutes = Math.round(total);
+let roundedHours = Math.round(total / 60);
+document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes} 分 (約${roundedHours} 時間)`;
     }
 
     function toggleAdditionalOptions() {
@@ -162,6 +176,10 @@
 <body>
   <div class="container">
     <h2>作業時間計算ツール</h2>
+    <p>このツールは、各作業の所要時間を自動計算するためのものです。<br>
+      必要なオプションを選択してください。<br>
+       *作業時間は1人あたりの作業時間になります。</p>
+
     <label for="multiplier">総m数を入力:</label>
     <input type="number" id="multiplier" value="1" min="1" onchange="calculateTotalTime()">
 
@@ -175,10 +193,11 @@
     <label for="select2">マウント:</label>
     <select id="select2" onchange="toggleAdditionalOptions()">
       <option value="">選択してください</option>
+      <option value="H">裏面ラミ、透明PET (0.6分)</option>
       <option value="F">パネルやアクリル (1.5分)</option>
-      <option value="G">透明PET、マグネット、ゴムマット (3分)</option>
-      <option value="E1">透明アクリルなどの水貼り (1440分)</option>
-      <option value="E2">ガラス (2880分)</option>
+      <option value="G">マグネット、ゴムマット (3分)</option>
+     <option value="E1">透明アクリルなどの水貼り (1440分)</option>
+  <!-- <option value="E2">ガラス (2880分)</option> この行を削除 -->
     </select>
 
     <div id="additionalOptions" style="display: none;">
@@ -187,8 +206,8 @@
         <option value="">選択してください</option>
         <option value="I">ベロだし (1.5分)</option>
         <option value="J">パネル繋ぎ (3分)</option>
-        <option value="K">巻き込み (15分)</option>
-        <option value="L">ツラ落とし (10分)</option>
+        <option value="K">巻き込み (7分)</option>
+        <option value="L">ツラ落とし (4分)</option>
         <option value="M">両面 (3分)</option>
       </select>
     </div>
@@ -196,7 +215,7 @@
     <label for="select3">カット作業:</label>
     <select id="select3" onchange="toggleFineCutOptions()">
       <option value="">選択してください</option>
-      <option value="C">トンボカットやシートカットのみ (3分)</option>
+      <option value="C">トンボカットやシートカットのみ (1分)</option>
       <option value="D">アルポリカット (15分)</option>
       <option value="E">ファインカット (0分)</option>
     </select>
