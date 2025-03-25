@@ -60,11 +60,33 @@
       text-align: center;
       margin-top: 20px;
     }
+    /* 2人作業の場合の表示 */
+    #twoPeopleTime {
+      font-size: 0.6em;  /* 合計時間の半分程度のフォントサイズ */
+      text-align: center;
+      margin-top: 10px;
+      color: #555;
+    }
     /* 追加オプションの整形 */
     #additionalOptions,
     #fineCutOptions,
     #eyeletOptions {
       margin-bottom: 15px;
+    }
+    /* リセットボタンの整形 */
+    button {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 20px;
+      font-size: 1em;
+      border: none;
+      background-color: #007BFF;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
     }
   </style>
   <script>
@@ -75,8 +97,9 @@
       "D": { text: "アルポリカット", time: 15 },
       "E": { text: "ファインカット", time: 0 },
       "E1": { text: "透明アクリルやガラス (1440分)", time: 1440 },
-  　　 "H": { text: "裏面ラミ、透明PET (0.6分)", time: 0.6 },
+      //"E2": { text: "ガラス (2880分)", time: 2880 },
       "F": { text: "パネルやアクリル (1.5分)", time: 1.5 },
+      "H": { text: "裏面ラミ、透明PET (0.6分)", time: 0.6 },
       "G": { text: "マグネット、ゴムマット (3分)", time: 3 },
       "I": { text: "ベロだし (1.5分)", time: 1.5 },
       "J": { text: "パネル繋ぎ (3分)", time: 3 },
@@ -97,17 +120,18 @@
 
       // ラミネート、マウント、追加処理 (select4) の選択を加算
       const otherSelectIds = ["select1", "select2", "select4"];
-  otherSelectIds.forEach(id => {
-    let elem = document.getElementById(id);
-    if (elem && elem.value) {
-      // 「透明アクリル」(E1) または「ガラス」(E2) の場合は、乗数を掛けずに固定値を加算
-      if (id === "select2" && (elem.value === "E1" || elem.value === "E2")) {
-        total += parameters[elem.value].time;
-      } else {
-        total += parameters[elem.value].time * multiplier;
-      }
-    }
-  });
+      otherSelectIds.forEach(id => {
+        let elem = document.getElementById(id);
+        if (elem && elem.value) {
+          // 「透明アクリルやガラス」(E1) の場合は、乗数を掛けずに固定値を加算
+          if (id === "select2" && (elem.value === "E1")) {
+            total += parameters[elem.value].time;
+          } else {
+            total += parameters[elem.value].time * multiplier;
+          }
+        }
+      });
+
       // カット作業の選択（select3）の処理
       let cutSelect = document.getElementById("select3");
       if (cutSelect && cutSelect.value) {
@@ -144,10 +168,16 @@
         total += (t1Count * 0.1) + (t2Count * 3);
       }
 
-      // 分と時間の両方を四捨五入して表示
-let roundedMinutes = Math.round(total);
-let roundedHours = Math.round(total / 60);
-document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes} 分 (約${roundedHours} 時間)`;
+      // 合計時間（分）を四捨五入して表示
+      let roundedMinutes = Math.round(total);
+      let roundedHours = Math.round(total / 60);
+      document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes} 分 (約${roundedHours} 時間)`;
+
+      // 2人で作業した場合は、総作業時間を1/2して表示
+      let halfTotal = total / 2;
+      let roundedHalfMinutes = Math.round(halfTotal);
+      let roundedHalfHours = Math.round(halfTotal / 60);
+      document.getElementById("twoPeopleTime").innerText = `【2人作業の場合】: ${roundedHalfMinutes} 分 (約${roundedHalfHours} 時間)`;
     }
 
     function toggleAdditionalOptions() {
@@ -170,14 +200,38 @@ document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes
       eyeletOptions.style.display = (sewingType === "S3") ? "block" : "none";
       calculateTotalTime();
     }
+
+    function clearAll() {
+      // 総m数を初期値にリセット
+      document.getElementById("multiplier").value = 1;
+
+      // 各select要素のリセット
+      const selectIds = ["select1", "select2", "select3", "select4", "select5", "sewingSelect", "sewingType"];
+      selectIds.forEach(function(id) {
+        document.getElementById(id).value = "";
+      });
+
+      // 数値入力項目のリセット
+      document.getElementById("charCount").value = 1;
+      document.getElementById("t1Count").value = 0;
+      document.getElementById("t2Count").value = 0;
+
+      // 追加オプションの表示を非表示にする
+      document.getElementById("additionalOptions").style.display = "none";
+      document.getElementById("fineCutOptions").style.display = "none";
+      document.getElementById("eyeletOptions").style.display = "none";
+
+      // 合計時間の再計算
+      calculateTotalTime();
+    }
   </script>
 </head>
 <body>
   <div class="container">
-    <h2>作業時間計算ツール</h2>
-    <p>このツールは、各作業の所要時間を自動計算するためのものです。<br>
-      必要なオプションを選択してください。<br>
-       *作業時間は1人あたりの作業時間になります。</p>
+    <h2>加工作業時間計算ツール</h2>
+    <p>加工作業の所要時間を自動計算します。<br>
+       必要なオプションを選択してください。<br>
+       ＊作業時間は1mあたりで算出し、1人で行った場合の作業時間になります。</p>
 
     <label for="multiplier">総m数を入力:</label>
     <input type="number" id="multiplier" value="1" min="1" onchange="calculateTotalTime()">
@@ -192,10 +246,11 @@ document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes
     <label for="select2">マウント:</label>
     <select id="select2" onchange="toggleAdditionalOptions()">
       <option value="">選択してください</option>
-      <option value="H">裏面ラミ、透明PET (0.6分)</option>
+      <!-- F, H, G, E1 の順番 -->
       <option value="F">パネルやアクリル (1.5分)</option>
+      <option value="H">裏面ラミ、透明PET (0.6分)</option>
       <option value="G">マグネット、ゴムマット (3分)</option>
-     <option value="E1">透明アクリルなどの水貼り (1440分)</option>
+      <option value="E1">透明アクリルなどの水貼り (1440分)</option>
     </select>
 
     <div id="additionalOptions" style="display: none;">
@@ -251,6 +306,11 @@ document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes
     </div>
 
     <h3 id="totalTime">合計時間: 0 分</h3>
+    <!-- 2人作業の場合の表示 -->
+    <div id="twoPeopleTime"></div>
+
+    <!-- リセットボタン -->
+    <button type="button" onclick="clearAll()">リセット</button>
   </div>
 </body>
 </html>
