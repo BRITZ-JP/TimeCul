@@ -3,15 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="manifest" href="manifest.json">
-  <title>時間計算ツール</title>
+  <title>総合作業時間計算ツール</title>
   <!-- Google Fonts: Noto Sans JP -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap" rel="stylesheet">
   <style>
-    /* 全体のリセット */
-    * {
-      box-sizing: border-box;
-    }
+    /* 共通リセット */
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 0;
@@ -20,60 +17,38 @@
       color: #333;
       line-height: 1.6;
     }
-    /* コンテナ設定 */
+    /* 横並び表示用ラッパー */
+    .tools-wrapper {
+      display: flex;
+      flex-direction: column;
+    }
+    /* 横並び用（PCなど画面が広い場合）の設定 */
+    @media (min-width: 768px) {
+      .tools-wrapper {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+      .container {
+        width: 48%;
+      }
+    }
     .container {
-      max-width: 600px;
-      margin: 20px auto;
       background: #fff;
       padding: 20px;
       border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
     }
-    /* 見出しの整形 */
-    h2, h3 {
-      text-align: center;
-    }
-    /* 追加した段落の整形 */
-    p {
-      font-size: 1.1em;
-      text-align: center;
-      margin: 10px 0 20px;
-      color: #555;
-    }
-    /* フォーム要素の整形 */
-    label {
-      margin-bottom: 5px;
-      font-weight: bold;
-    }
-    input[type="number"],
-    select {
+    h2, h3 { text-align: center; }
+    p { font-size: 1.1em; text-align: center; margin: 10px 0 20px; color: #555; }
+    label { margin-bottom: 5px; font-weight: bold; }
+    input[type="number"], select {
       width: 100%;
       padding: 8px;
       margin-bottom: 15px;
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-    /* 結果表示の整形 */
-    #totalTime {
-      font-size: 1.2em;
-      font-weight: bold;
-      text-align: center;
-      margin-top: 20px;
-    }
-    /* 2人作業の場合の表示 */
-    #twoPeopleTime {
-      font-size: 0.6em;  /* 合計時間の半分程度のフォントサイズ */
-      text-align: center;
-      margin-top: 10px;
-      color: #555;
-    }
-    /* 追加オプションの整形 */
-    #additionalOptions,
-    #fineCutOptions,
-    #eyeletOptions {
-      margin-bottom: 15px;
-    }
-    /* リセットボタンの整形 */
     button {
       display: block;
       margin: 20px auto;
@@ -85,11 +60,211 @@
       border-radius: 4px;
       cursor: pointer;
     }
-    button:hover {
-      background-color: #0056b3;
+    button:hover { background-color: #0056b3; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th { background-color: #f0f0f0; }
+    /* 加工ツール専用スタイル */
+    #totalTime, #twoPeopleTime, #combinedTotal {
+      font-size: 1.2em;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 20px;
+    }
+    #twoPeopleTime {
+      font-size: 0.9em;
+      color: #555;
     }
   </style>
   <script>
+    // グローバル変数（単位：分）
+    var globalPrintingTime = 0;
+    var globalProcessingTime = 0;
+
+    /* =====================
+       印刷時間計算ツール（元ファイル：出力時間計算html化.html）
+       ===================== */
+    function updatePrintMode() {
+      var media = document.getElementById("mediaSelect").value;
+      var printModeSelect = document.getElementById("printModeSelect");
+      printModeSelect.innerHTML = "";
+      if (media === "media2") {
+        var modes = ["通常の印刷", "白インク(反転含む)", "白インク3層", "白を部分的に敷く", "透過(電飾)"];
+        modes.forEach(function(mode) {
+          var opt = document.createElement("option");
+          opt.value = mode;
+          opt.text = mode;
+          printModeSelect.appendChild(opt);
+        });
+      } else {
+        var opt = document.createElement("option");
+        opt.value = "通常の印刷";
+        opt.text = "通常の印刷";
+        printModeSelect.appendChild(opt);
+      }
+      calculateOutputTime();
+    }
+
+    function calculateOutputTime() {
+      var area = parseFloat(document.getElementById("totalArea").value) || 0;
+      var media = document.getElementById("mediaSelect").value;
+      var printMode = document.getElementById("printModeSelect").value;
+
+      // 結果オブジェクト：各出力機ごとの合計時間（単位：時間）
+      var result = {
+        "EPSON80": null,
+        "Canon": null,
+        "AcuityLED": null,
+        "AcuityUltra": null,
+        "EPSON50": null
+      };
+
+      // Condition A: media1, media2, media3 → EPSON80
+      if ((media === "media1" || media === "media2" || media === "media3") && printMode) {
+        var factor = 0;
+        if (printMode === "通常の印刷") factor = 13.2;
+        else if (printMode === "白インク(反転含む)") factor = 5.9;
+        else if (printMode === "白インク3層") factor = 2.2;
+        else if (printMode === "白を部分的に敷く") factor = 3.3;
+        else if (printMode === "透過(電飾)") factor = 6.6;
+        result["EPSON80"] = area / factor;
+      }
+
+      // Condition B: media4 → Canon
+      if (media === "media4" && printMode) {
+        var factor = 0;
+        if (printMode === "通常の印刷") factor = 10.8;
+        else if (printMode === "透過(電飾)") factor = 5.4;
+        result["Canon"] = area / factor;
+      }
+
+      // Condition C: media1, media2, media5 → AcuityLED
+      if ((media === "media1" || media === "media2" || media === "media5") && printMode) {
+        var factor = 0;
+        if (printMode === "通常の印刷") factor = 13;
+        else if (printMode === "白インク(反転含む)") factor = 4.8;
+        else if (printMode === "白インク3層") factor = 3.1;
+        else if (printMode === "白を部分的に敷く") factor = 4;
+        else if (printMode === "透過(電飾)") factor = 10.4;
+        result["AcuityLED"] = area / factor;
+      }
+
+      // Condition D: media1, media2, media5 → AcuityUltra
+      if ((media === "media1" || media === "media2" || media === "media5") && printMode) {
+        var factor = 0;
+        if (printMode === "通常の印刷") factor = 74;
+        else if (printMode === "白インク(反転含む)") factor = 8;
+        else if (printMode === "白インク3層") factor = 8;
+        else if (printMode === "白を部分的に敷く") factor = 4;
+        else if (printMode === "透過(電飾)") factor = 37;
+        result["AcuityUltra"] = area / factor;
+      }
+
+      // Condition E: media6 → EPSON50
+      if (media === "media6" && printMode === "通常の印刷") {
+        result["EPSON50"] = area / 10;
+      }
+
+      // 結果表示（各出力機ごと） ※単位は「時間」
+      var dailyHours = 9; // 営業9時間＝1日
+      var outputHtml = "";
+      if (result["EPSON80"] !== null) {
+        var hours = result["EPSON80"];
+        var days = hours / dailyHours;
+        var boxStyle = "border:1px solid #ccc; padding:5px; margin:2px; min-width:60px;";
+        var epson80_1 = hours.toFixed(1);
+        var epson80_2 = (hours/2).toFixed(1);
+        var epson80_3 = (hours/3).toFixed(1);
+        var epson80_1d = days.toFixed(1);
+        var epson80_2d = (days/2).toFixed(1);
+        var epson80_3d = (days/3).toFixed(1);
+        outputHtml += "<tr><td>EPSON80</td><td><div style='display:flex; justify-content: space-around;'>"
+          + "<div style='" + boxStyle + "'>1台:<br>" + epson80_1 + " 時間</div>"
+          + "<div style='" + boxStyle + "'>2台:<br>" + epson80_2 + " 時間</div>"
+          + "<div style='" + boxStyle + "'>3台:<br>" + epson80_3 + " 時間</div>"
+          + "</div></td><td><div style='display:flex; justify-content: space-around;'>"
+          + "<div style='" + boxStyle + "'>1台:<br>" + epson80_1d + " 日</div>"
+          + "<div style='" + boxStyle + "'>2台:<br>" + epson80_2d + " 日</div>"
+          + "<div style='" + boxStyle + "'>3台:<br>" + epson80_3d + " 日</div>"
+          + "</div></td></tr>";
+      } else {
+        outputHtml += "<tr><td>EPSON80</td><td colspan='2'>条件未該当</td></tr>";
+      }
+      if (result["Canon"] !== null) {
+        var hours = result["Canon"];
+        var days = hours / dailyHours;
+        outputHtml += "<tr><td>Canon</td><td>" + hours.toFixed(1) + " 時間</td><td>" + days.toFixed(1) + " 日</td></tr>";
+      } else {
+        outputHtml += "<tr><td>Canon</td><td colspan='2'>条件未該当</td></tr>";
+      }
+      if (result["AcuityLED"] !== null) {
+        var hours = result["AcuityLED"];
+        var days = hours / dailyHours;
+        outputHtml += "<tr><td>AcuityLED</td><td>" + hours.toFixed(1) + " 時間</td><td>" + days.toFixed(1) + " 日</td></tr>";
+      } else {
+        outputHtml += "<tr><td>AcuityLED</td><td colspan='2'>条件未該当</td></tr>";
+      }
+      if (result["AcuityUltra"] !== null) {
+        var hours = result["AcuityUltra"];
+        var days = hours / dailyHours;
+        outputHtml += "<tr><td>AcuityUltra</td><td>" + hours.toFixed(1) + " 時間</td><td>" + days.toFixed(1) + " 日</td></tr>";
+      } else {
+        outputHtml += "<tr><td>AcuityUltra</td><td colspan='2'>条件未該当</td></tr>";
+      }
+      if (result["EPSON50"] !== null) {
+        var hours = result["EPSON50"];
+        var days = hours / dailyHours;
+        var boxStyle = "border:1px solid #ccc; padding:5px; margin:2px; min-width:60px;";
+        var epson50_1 = hours.toFixed(1);
+        var epson50_2 = (hours/2).toFixed(1);
+        var epson50_3 = (hours/3).toFixed(1);
+        var epson50_1d = days.toFixed(1);
+        var epson50_2d = (days/2).toFixed(1);
+        var epson50_3d = (days/3).toFixed(1);
+        outputHtml += "<tr><td>EPSON50</td><td><div style='display:flex; justify-content: space-around;'>"
+          + "<div style='" + boxStyle + "'>1台:<br>" + epson50_1 + " 時間</div>"
+          + "<div style='" + boxStyle + "'>2台:<br>" + epson50_2 + " 時間</div>"
+          + "<div style='" + boxStyle + "'>3台:<br>" + epson50_3 + " 時間</div>"
+          + "</div></td><td><div style='display:flex; justify-content: space-around;'>"
+          + "<div style='" + boxStyle + "'>1台:<br>" + epson50_1d + " 日</div>"
+          + "<div style='" + boxStyle + "'>2台:<br>" + epson50_2d + " 日</div>"
+          + "<div style='" + boxStyle + "'>3台:<br>" + epson50_3d + " 日</div>"
+          + "</div></td></tr>";
+      } else {
+        outputHtml += "<tr><td>EPSON50</td><td colspan='2'>条件未該当</td></tr>";
+      }
+      document.getElementById("outputResults").innerHTML = outputHtml;
+
+      // 代表的印刷時間をグローバル変数へ（分換算）
+      var printingHours = 0;
+      if(result["EPSON80"] !== null) printingHours = result["EPSON80"];
+      else if(result["Canon"] !== null) printingHours = result["Canon"];
+      else if(result["AcuityLED"] !== null) printingHours = result["AcuityLED"];
+      else if(result["AcuityUltra"] !== null) printingHours = result["AcuityUltra"];
+      else if(result["EPSON50"] !== null) printingHours = result["EPSON50"];
+      globalPrintingTime = printingHours * 60; // 時間→分換算
+
+      updateCombinedTotal();
+    }
+
+    function clearAllInputs() {
+      document.getElementById("totalArea").value = "";
+      document.getElementById("mediaSelect").value = "";
+      updatePrintMode();
+      calculateOutputTime();
+    }
+
+    /* =====================
+       加工作業時間計算ツール（元ファイル：index.html）
+       ===================== */
     const parameters = {
       "A": { text: "ラミネートあり", time: 0.6 },
       "B": { text: "ラミネートなし", time: 0 },
@@ -98,7 +273,6 @@
       "D": { text: "アルポリカット", time: 15 },
       "E": { text: "ファインカット", time: 0 },
       "E1": { text: "透明アクリルやガラス (1440分)", time: 1440 },
-      //"E2": { text: "ガラス (2880分)", time: 2880 },
       "F": { text: "パネルやアクリル (1.5分)", time: 1.5 },
       "H": { text: "裏面ラミ、透明PET (0.6分)", time: 0.6 },
       "G": { text: "マグネット、ゴムマット (3分)", time: 3 },
@@ -118,13 +292,10 @@
     function calculateTotalTime() {
       let total = 0;
       let multiplier = parseInt(document.getElementById("multiplier").value) || 1;
-
-      // ラミネート、マウント、追加処理 (select4) の選択を加算
       const otherSelectIds = ["select1", "select2", "select4"];
       otherSelectIds.forEach(id => {
         let elem = document.getElementById(id);
         if (elem && elem.value) {
-          // 「透明アクリルやガラス」(E1) の場合は、乗数を掛けずに固定値を加算
           if (id === "select2" && (elem.value === "E1")) {
             total += parameters[elem.value].time;
           } else {
@@ -132,12 +303,9 @@
           }
         }
       });
-
-      // カット作業の選択（select3）の処理
       let cutSelect = document.getElementById("select3");
       if (cutSelect && cutSelect.value) {
         if (cutSelect.value === "E") {
-          // ファインカットの場合：基本時間は0として、追加処理のみ計算する
           let fineCutSelect = document.getElementById("select5").value;
           if (fineCutSelect) {
             let charCount = parseInt(document.getElementById("charCount").value) || 0;
@@ -150,35 +318,33 @@
             }
           }
         } else {
-          // ファインカット以外の場合は、基本時間に乗数を掛けて加算
           total += parameters[cutSelect.value].time * multiplier;
         }
       }
-
-      // 縫製項目の選択取得
       let sewingSelect = document.getElementById("sewingSelect");
       if (sewingSelect && sewingSelect.value) {
         total += parameters[sewingSelect.value].time * multiplier;
       }
-
-      // ハトメが選ばれている場合の処理
       let eyeletSelect = document.getElementById("sewingType");
       if (eyeletSelect && eyeletSelect.value === "S3") {
         let t1Count = parseInt(document.getElementById("t1Count").value) || 0;
         let t2Count = parseInt(document.getElementById("t2Count").value) || 0;
         total += (t1Count * 0.1) + (t2Count * 3);
       }
-
-      // 合計時間（分）を四捨五入して表示
+      // 加工作業の合計時間：分表示＋約○時間
       let roundedMinutes = Math.round(total);
       let roundedHours = Math.round(total / 60);
       document.getElementById("totalTime").innerText = `合計時間: ${roundedMinutes} 分 (約${roundedHours} 時間)`;
 
-      // 2人で作業した場合は、総作業時間を1/2して表示
+      // 2人作業の場合の表示
       let halfTotal = total / 2;
       let roundedHalfMinutes = Math.round(halfTotal);
       let roundedHalfHours = Math.round(halfTotal / 60);
       document.getElementById("twoPeopleTime").innerText = `【2人作業の場合】: ${roundedHalfMinutes} 分 (約${roundedHalfHours} 時間)`;
+
+      // 加工作業時間をグローバル変数に（分）
+      globalProcessingTime = total;
+      updateCombinedTotal();
     }
 
     function toggleAdditionalOptions() {
@@ -203,116 +369,170 @@
     }
 
     function clearAll() {
-      // 総m数を初期値にリセット
       document.getElementById("multiplier").value = 1;
-
-      // 各select要素のリセット
       const selectIds = ["select1", "select2", "select3", "select4", "select5", "sewingSelect", "sewingType"];
       selectIds.forEach(function(id) {
         document.getElementById(id).value = "";
       });
-
-      // 数値入力項目のリセット
       document.getElementById("charCount").value = 1;
       document.getElementById("t1Count").value = 0;
       document.getElementById("t2Count").value = 0;
-
-      // 追加オプションの表示を非表示にする
       document.getElementById("additionalOptions").style.display = "none";
       document.getElementById("fineCutOptions").style.display = "none";
       document.getElementById("eyeletOptions").style.display = "none";
-
-      // 合計時間の再計算
       calculateTotalTime();
+    }
+
+    /* =====================
+       合計時間の更新（印刷＋加工）
+       ===================== */
+    function updateCombinedTotal() {
+      // 合計時間（分）＝ 印刷時間（globalPrintingTime）＋ 加工時間（globalProcessingTime）
+      var combined = globalPrintingTime + globalProcessingTime;
+      var combinedHours = Math.round(combined / 60);
+      document.getElementById("combinedTotal").innerText = `【全体合計時間】: 約${combinedHours} 時間`;
     }
   </script>
 </head>
 <body>
+  <div class="tools-wrapper">
+    <!-- 印刷時間計算ツール -->
+    <div class="container">
+      <h2>印刷時間計算ツール</h2>
+      <p>
+        メディアと印刷モードを選択し、総平米を入力してください。<br>
+        メディアが「NMSTR-Crystalなど」の場合のみ複数の印刷モードが選択可能です。<br>
+        ※計算結果は理論値です。実際の出力時間は状況によってより多くかかる場合があります。
+      </p>
+      <!-- メディア選択 -->
+      <label for="mediaSelect">メディアを選択:</label>
+      <select id="mediaSelect" onchange="updatePrintMode()">
+        <option value="">選択してください</option>
+        <option value="media1">NSF1362など（合成紙含む通常のメディア）</option>
+        <option value="media2">NMSTR-Crystalなど（透明/電飾のメディア）</option>
+        <option value="media3">NSH1140CHAなど（経師）</option>
+        <option value="media4">CAPS7GSなど（水性メディア）</option>
+        <option value="media5">DEC2-001など（ターポリンメディア）</option>
+        <option value="media6">NFP5800LT6など（スエードメディア）</option>
+      </select>
+
+      <!-- 印刷モード選択 -->
+      <label for="printModeSelect">印刷モードを選択:</label>
+      <select id="printModeSelect" onchange="calculateOutputTime()">
+        <!-- updatePrintMode()で更新 -->
+      </select>
+
+      <!-- 総平米入力 -->
+      <label for="totalArea">総平米を入力:</label>
+      <input type="number" id="totalArea" oninput="calculateOutputTime()" placeholder="例：50" />
+
+      <button type="button" onclick="clearAllInputs()">クリア</button>
+
+      <!-- 結果表示 -->
+      <h3>計算結果（各出力機別）</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>出力機</th>
+            <th>1時間あたり</th>
+            <th>1日あたり（9時間換算）</th>
+          </tr>
+        </thead>
+        <tbody id="outputResults">
+          <!-- 結果はJSで出力 -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 加工作業時間計算ツール -->
+    <div class="container">
+      <h2>加工作業時間計算ツール</h2>
+      <p>加工作業の所要時間を自動計算します。<br>
+         必要なオプションを選択してください。<br>
+         ※作業時間は1mあたりで算出し、1人で行った場合の作業時間になります。</p>
+
+      <label for="multiplier">総m数を入力:</label>
+      <input type="number" id="multiplier" value="1" min="1" onchange="calculateTotalTime()">
+
+      <label for="select1">ラミネート:</label>
+      <select id="select1" onchange="calculateTotalTime()">
+        <option value="">選択してください</option>
+        <option value="A">あり (0.6分)</option>
+        <option value="B">なし (0分)</option>
+      </select>
+
+      <label for="select2">マウント:</label>
+      <select id="select2" onchange="toggleAdditionalOptions()">
+        <option value="">選択してください</option>
+        <option value="F">パネルやアクリル (1.5分)</option>
+        <option value="H">裏面ラミ、透明PET (0.6分)</option>
+        <option value="G">マグネット、ゴムマット (3分)</option>
+        <option value="E1">透明アクリルなどの水貼り (1440分)</option>
+      </select>
+
+      <div id="additionalOptions" style="display: none;">
+        <label for="select4">追加処理:</label>
+        <select id="select4" onchange="calculateTotalTime()">
+          <option value="">選択してください</option>
+          <option value="I">ベロだし (1.5分)</option>
+          <option value="J">パネル繋ぎ (3分)</option>
+          <option value="K">巻き込み (7分)</option>
+          <option value="L">ツラ落とし (4分)</option>
+          <option value="M">両面 (3分)</option>
+        </select>
+      </div>
+
+      <label for="select3">カット作業:</label>
+      <select id="select3" onchange="toggleFineCutOptions()">
+        <option value="">選択してください</option>
+        <option value="C">トンボカットやシートカットのみ (1分)</option>
+        <option value="C2">姿カット (2分)</option>
+        <option value="D">アルポリカット (15分)</option>
+        <option value="E">ファインカット (0分)</option>
+      </select>
+
+      <div id="fineCutOptions" style="display: none;">
+        <label for="select5">ファインカット追加処理:</label>
+        <select id="select5" onchange="calculateTotalTime()">
+          <option value="">選択してください</option>
+          <option value="N">文字のHが21mm以上 (0.5分)</option>
+          <option value="O">文字のHが20mm未満 (1分)</option>
+          <option value="O2">文字のHが20mm未満のテンタックや3M糊 (3分)</option>
+        </select>
+        <label for="charCount">文字数を入力:</label>
+        <input type="number" id="charCount" value="1" min="1" onchange="calculateTotalTime()">
+      </div>
+
+      <label for="sewingSelect">縫製:</label>
+      <select id="sewingSelect" onchange="calculateTotalTime()">
+        <option value="">選択してください</option>
+        <option value="S1">通常縫製 (2分)</option>
+        <option value="S2">四方折り返し (4分)</option>
+      </select>
+
+      <label for="sewingType">ハトメ:</label>
+      <select id="sewingType" onchange="toggleEyeletOptions()">
+        <option value="">選択してください</option>
+        <option value="S3">ハトメ (0分)</option>
+      </select>
+
+      <div id="eyeletOptions" style="display: none;">
+        <label for="t1Count">25番 (0.1分):</label>
+        <input type="number" id="t1Count" value="0" min="0" onchange="calculateTotalTime()">
+        <label for="t2Count">28番 (3分):</label>
+        <input type="number" id="t2Count" value="0" min="0" onchange="calculateTotalTime()">
+      </div>
+
+      <h3 id="totalTime">合計時間: 0 分 (約0 時間)</h3>
+      <div id="twoPeopleTime"></div>
+      <button type="button" onclick="clearAll()">リセット</button>
+    </div>
+  </div>
+
+  <!-- 合計結果表示（印刷＋加工） -->
   <div class="container">
-    <h2>加工作業時間計算ツール</h2>
-    <p>加工作業の所要時間を自動計算します。<br>
-       必要なオプションを選択してください。<br>
-       ＊作業時間は1mあたりで算出し、1人で行った場合の作業時間になります。</p>
-
-    <label for="multiplier">総m数を入力:</label>
-    <input type="number" id="multiplier" value="1" min="1" onchange="calculateTotalTime()">
-
-    <label for="select1">ラミネート:</label>
-    <select id="select1" onchange="calculateTotalTime()">
-      <option value="">選択してください</option>
-      <option value="A">あり (0.6分)</option>
-      <option value="B">なし (0分)</option>
-    </select>
-
-    <label for="select2">マウント:</label>
-    <select id="select2" onchange="toggleAdditionalOptions()">
-      <option value="">選択してください</option>
-      <!-- F, H, G, E1 の順番 -->
-      <option value="F">パネルやアクリル (1.5分)</option>
-      <option value="H">裏面ラミ、透明PET (0.6分)</option>
-      <option value="G">マグネット、ゴムマット (3分)</option>
-      <option value="E1">透明アクリルなどの水貼り (1440分)</option>
-    </select>
-
-    <div id="additionalOptions" style="display: none;">
-      <label for="select4">追加処理:</label>
-      <select id="select4" onchange="calculateTotalTime()">
-        <option value="">選択してください</option>
-        <option value="I">ベロだし (1.5分)</option>
-        <option value="J">パネル繋ぎ (3分)</option>
-        <option value="K">巻き込み (7分)</option>
-        <option value="L">ツラ落とし (4分)</option>
-        <option value="M">両面 (3分)</option>
-      </select>
-    </div>
-
-    <label for="select3">カット作業:</label>
-    <select id="select3" onchange="toggleFineCutOptions()">
-      <option value="">選択してください</option>
-      <option value="C">トンボカットやシートカットのみ (1分)</option>
-      <option value="C2">姿カット (2分)</option>
-      <option value="D">アルポリカット (15分)</option>
-      <option value="E">ファインカット (0分)</option>
-    </select>
-
-    <div id="fineCutOptions" style="display: none;">
-      <label for="select5">ファインカット追加処理:</label>
-      <select id="select5" onchange="calculateTotalTime()">
-        <option value="">選択してください</option>
-        <option value="N">文字のHが21mm以上 (0.5分)</option>
-        <option value="O">文字のHが20mm未満 (1分)</option>
-        <option value="O2">文字のHが20mm未満のテンタックや3M糊 (3分)</option>
-      </select>
-      <label for="charCount">文字数を入力:</label>
-      <input type="number" id="charCount" value="1" min="1" onchange="calculateTotalTime()">
-    </div>
-
-    <label for="sewingSelect">縫製:</label>
-    <select id="sewingSelect" onchange="calculateTotalTime()">
-      <option value="">選択してください</option>
-      <option value="S1">通常縫製 (2分)</option>
-      <option value="S2">四方折り返し (4分)</option>
-    </select>
-
-    <label for="sewingType">ハトメ:</label>
-    <select id="sewingType" onchange="toggleEyeletOptions()">
-      <option value="">選択してください</option>
-      <option value="S3">ハトメ (0分)</option>
-    </select>
-
-    <div id="eyeletOptions" style="display: none;">
-      <label for="t1Count">25番 (0.1分):</label>
-      <input type="number" id="t1Count" value="0" min="0" onchange="calculateTotalTime()">
-      <label for="t2Count">28番 (3分):</label>
-      <input type="number" id="t2Count" value="0" min="0" onchange="calculateTotalTime()">
-    </div>
-
-    <h3 id="totalTime">合計時間: 0 分</h3>
-    <!-- 2人作業の場合の表示 -->
-    <div id="twoPeopleTime"></div>
-
-    <!-- リセットボタン -->
-    <button type="button" onclick="clearAll()">リセット</button>
+    <h2>全体合計時間</h2>
+    <div id="combinedTotal">【全体合計時間】: 約0 時間</div>
   </div>
 </body>
 </html>
